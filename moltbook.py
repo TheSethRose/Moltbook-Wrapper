@@ -18,6 +18,7 @@ Usage:
 import argparse
 import sys
 import os
+import json
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -306,12 +307,10 @@ NOTE: All posts are checked for PII before being sent.
         
         # === STATS ===
         elif args.command == "stats":
-            import json
             print(json.dumps(cli.get_stats(), indent=2))
             return
         
         if result:
-            import json
             print(json.dumps(result, indent=2))
     
     except Exception as e:
