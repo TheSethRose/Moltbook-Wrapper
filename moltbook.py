@@ -37,13 +37,13 @@ except ImportError:
     class MoltbookClient:
         """Minimal Moltbook API client for wrapper integration."""
         
-        BASE_URL = "https://moltbook.com/api/v1"
+        BASE_URL = "https://www.moltbook.com/api/v1"
         
         def __init__(self, api_key: str = None):
             self.api_key = api_key or os.environ.get("MOLTBOOK_API_KEY")
             if not self.api_key:
                 raise ValueError("API key required. Set MOLTBOOK_API_KEY env var.")
-            self.headers = {"X-API-Key": self.api_key}
+            self.headers = {"Authorization": f"Bearer {self.api_key}"}
         
         def _request(self, method: str, endpoint: str, data: dict = None) -> dict:
             url = f"{self.BASE_URL}/{endpoint}"
@@ -68,6 +68,16 @@ except ImportError:
             return self._request("GET", "submolts")
         def submolt_subscribe(self, name):
             return self._request("POST", f"submolts/{name}/subscribe")
+        def post_get(self, post_id):
+            return self._request("GET", f"posts/{post_id}")
+        def post_delete(self, post_id):
+            return self._request("DELETE", f"posts/{post_id}")
+        def post_vote(self, post_id, direction="upvote"):
+            return self._request("POST", f"posts/{post_id}/{direction}")
+        def comment_create(self, post_id, content, parent_id=None):
+            data = {"content": content}
+            if parent_id: data["parent_id"] = parent_id
+            return self._request("POST", f"posts/{post_id}/comments", data)
 
 
 # ============================================================================
@@ -241,6 +251,16 @@ NOTE: All posts are checked for PII before being sent.
     create_parser.add_argument("--content", "-c", required=True)
     create_parser.add_argument("--url", "-u")
     post_sub.add_parser("list", help="List posts").add_argument("--submolt", "-s")
+    get_parser = post_sub.add_parser("get", help="Get a single post with comments")
+    get_parser.add_argument("post_id", help="Post UUID")
+    delete_parser = post_sub.add_parser("delete", help="Delete your own post")
+    delete_parser.add_argument("post_id", help="Post UUID")
+    vote_parser = post_sub.add_parser("vote", help="Upvote a post (toggle)")
+    vote_parser.add_argument("post_id", help="Post UUID")
+    comment_parser = post_sub.add_parser("comment", help="Add a comment to a post (PII protected)")
+    comment_parser.add_argument("post_id", help="Post UUID")
+    comment_parser.add_argument("--content", "-c", required=True, help="Comment text")
+    comment_parser.add_argument("--parent", "-p", help="Parent comment ID for replies")
     
     # === SUBMOLT COMMANDS ===
     submolt_parser = subparsers.add_parser("submolt", help="Submolt operations")
@@ -293,6 +313,18 @@ NOTE: All posts are checked for PII before being sent.
                 )
             elif args.post_command == "list":
                 result = cli.client.posts_list(args.submolt)
+            elif args.post_command == "get":
+                result = cli.client.post_get(args.post_id)
+            elif args.post_command == "delete":
+                result = cli.client.post_delete(args.post_id)
+            elif args.post_command == "vote":
+                result = cli.client.post_vote(args.post_id)
+            elif args.post_command == "comment":
+                is_safe, msg, _ = cli.check_content(args.content, "comment")
+                if not is_safe:
+                    result = {"success": False, "error": "PII Protection Blocked", "details": msg}
+                else:
+                    result = cli.client.comment_create(args.post_id, args.content, args.parent)
         
         # === SUBMOLT HANDLERS ===
         elif args.command == "submolt":
